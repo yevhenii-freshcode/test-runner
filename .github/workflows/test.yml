@@ -61,7 +61,7 @@ jobs:
 
           echo "No valid newer run found. Proceeding with jobs."
   dummy_long_job:
-    name: Dummy 5-minute job # t
+    name: Dummy 5-minute job
     needs: guard
     runs-on: ubuntu-latest
     steps:
