@@ -18,7 +18,7 @@ jobs:
           echo "Current run id: $GITHUB_RUN_ID, run number: $GITHUB_RUN_NUMBER"
           echo "Workflow: $GITHUB_WORKFLOW, branch: $GITHUB_REF_NAME"
 
-          # 1) Find the workflow ID by name (the "name:" at the top of the *calling* workflow) test
+          # 1) Find the workflow ID by name (the "name:" at the top of the *calling* workflow)
           WORKFLOW_ID=$(
             gh api "repos/${REPO}/actions/workflows" \
               --jq ".workflows[] | select(.name == \"${GITHUB_WORKFLOW}\") | .id" \
