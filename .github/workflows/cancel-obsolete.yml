@@ -3,10 +3,6 @@ name: Cancel Obsolete Run
 on:
   workflow_call:
 
-permissions:
-    actions: write # needed for gh run cancel via GITHUB_TOKEN
-    contents: read
-
 jobs:
   guard:
     name: Cancel if this run is obsolete
