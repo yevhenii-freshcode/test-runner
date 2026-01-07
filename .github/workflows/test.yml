@@ -18,26 +18,32 @@ jobs:
       actions: write # needed for gh run cancel via GITHUB_TOKEN
       contents: read
     steps:
-      - name: Cancel this run if a newer one exists
+      - name: Check for newer runs and cancel self if obsolete
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          WORKFLOW_NAME: ${{ github.workflow }}
-          BRANCH: ${{ github.ref_name }}
+        shell: bash
         run: |
           echo "Current run id: $GITHUB_RUN_ID, run number: $GITHUB_RUN_NUMBER"
           echo "Workflow: $GITHUB_WORKFLOW, branch: $GITHUB_REF_NAME"
 
-          # Derive workflow id (works for .yml/.yaml)
-          WORKFLOW_FILE="${GITHUB_WORKFLOW_REF##*/}"
-          echo "Workflow file: $WORKFLOW_FILE"
+          # 1) Find the workflow ID by name (the "name:" at the top of this file)
+          WORKFLOW_ID=$(
+            gh api "repos/${REPO}/actions/workflows" \
+              --jq ".workflows[] | select(.name == \"${GITHUB_WORKFLOW}\") | .id" \
+            2>/dev/null || echo ""
+          )
 
-          # Get all queued/in_progress runs for this workflow on this branch
-          # If gh or jq fail, just treat as 'no newer runs' instead of erroring.
+          if [ -z "$WORKFLOW_ID" ]; then
+            echo "Could not find workflow id for name '${GITHUB_WORKFLOW}'. Proceeding without cancellation."
+            exit 0
+          fi
+
+          echo "Resolved workflow id: ${WORKFLOW_ID}"
+
+          # 2) Get any newer queued/in_progress runs for this workflow on this branch
           newer_run_number=$(
-            gh api \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_FILE}/runs" \
+            gh api "repos/${REPO}/actions/workflows/${WORKFLOW_ID}/runs" \
               -F branch="${GITHUB_REF_NAME}" \
               -F status="queued,in_progress" \
               --jq "[.workflow_runs[] | select(.run_number > ${GITHUB_RUN_NUMBER}) | .run_number] | max? // empty" \
@@ -46,13 +52,14 @@ jobs:
 
           echo "newer_run_number='${newer_run_number}'"
 
-          if [ -n "$newer_run_number" ]; then
+          # Basic sanity check: newer_run_number must be a number
+          if [[ "$newer_run_number" =~ ^[0-9]+$ ]]; then
             echo "Found newer run number ${newer_run_number}. Cancelling this run ${GITHUB_RUN_ID}."
-            gh run cancel "${GITHUB_RUN_ID}" || echo "Failed to cancel run, but continuing."
+            gh run cancel "${GITHUB_RUN_ID}" --repo "${REPO}" || echo "Failed to cancel run, but continuing."
             exit 0
           fi
 
-          echo "No newer run found. Proceeding with jobs."
+          echo "No valid newer run found. Proceeding with jobs."
   dummy_long_job:
     name: Dummy 5-minute job
     needs: guard
