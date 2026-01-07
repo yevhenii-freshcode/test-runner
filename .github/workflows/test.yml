@@ -12,64 +12,18 @@ concurrency:
 
 jobs:
   guard:
-    name: Cancel if this run is obsolete
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write # needed for gh run cancel via GITHUB_TOKEN
-      contents: read
-    steps:
-      - name: Check for newer runs and cancel self if obsolete
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          echo "Current run id: $GITHUB_RUN_ID, run number: $GITHUB_RUN_NUMBER"
-          echo "Workflow: $GITHUB_WORKFLOW, branch: $GITHUB_REF_NAME"
+    uses: ./.github/workflows/cancel-obsolete.yml
 
-          # 1) Find the workflow ID by name (the "name:" at the top of this file)
-          WORKFLOW_ID=$(
-            gh api "repos/${REPO}/actions/workflows" \
-              --jq ".workflows[] | select(.name == \"${GITHUB_WORKFLOW}\") | .id" \
-            2>/dev/null || echo ""
-          )
-
-          if [ -z "$WORKFLOW_ID" ]; then
-            echo "Could not find workflow id for name '${GITHUB_WORKFLOW}'. Proceeding without cancellation."
-            exit 0
-          fi
-
-          echo "Resolved workflow id: ${WORKFLOW_ID}"
-
-          # 2) Get any newer queued/in_progress runs for this workflow on this branch
-          newer_run_number=$(
-            gh api "repos/${REPO}/actions/workflows/${WORKFLOW_ID}/runs" \
-              -F branch="${GITHUB_REF_NAME}" \
-              -F status="queued,in_progress" \
-              --jq "[.workflow_runs[] | select(.run_number > ${GITHUB_RUN_NUMBER}) | .run_number] | max? // empty" \
-            2>/dev/null || echo ""
-          )
-
-          echo "newer_run_number='${newer_run_number}'"
-
-          # Basic sanity check: newer_run_number must be a number
-          if [[ "$newer_run_number" =~ ^[0-9]+$ ]]; then
-            echo "Found newer run number ${newer_run_number}. Cancelling this run ${GITHUB_RUN_ID}."
-            gh run cancel "${GITHUB_RUN_ID}" --repo "${REPO}" || echo "Failed to cancel run, but continuing."
-            exit 0
-          fi
-
-          echo "No valid newer run found. Proceeding with jobs."
   dummy_long_job:
-    name: Dummy 5-minute job
+    name: Dummy 1-minute job
     needs: guard
     runs-on: ubuntu-latest
     steps:
       - name: Print start time
         run: echo "Dummy job started at $(date -u)"
 
-      - name: Sleep for 5 minutes
-        run: sleep 300
+      - name: Sleep for 1 minute
+        run: sleep 60
 
       - name: Print end time
         run: echo "Dummy job finished at $(date -u)"
