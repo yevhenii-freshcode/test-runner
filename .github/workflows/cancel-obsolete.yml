@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Check for newer runs and cancel self if obsolete
+      - name: Check for newer runs and cancel self if obsolete test
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
