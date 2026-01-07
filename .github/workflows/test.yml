@@ -26,28 +26,33 @@ jobs:
           WORKFLOW_NAME: ${{ github.workflow }}
           BRANCH: ${{ github.ref_name }}
         run: |
-          echo "Current run id: $RUN_ID"
-          echo "Checking for newer runs of workflow '${WORKFLOW_NAME}' on branch '${BRANCH}'"
+          echo "Current run id: $GITHUB_RUN_ID, run number: $GITHUB_RUN_NUMBER"
+          echo "Workflow: $GITHUB_WORKFLOW, branch: $GITHUB_REF_NAME"
 
-          # List runs of this workflow on this branch, newer first
-          newer_run_id=$(gh api \
-            repos/$REPO/actions/workflows \
-            --jq ".workflows[] | select(.name == \"${WORKFLOW_NAME}\") | .id" | while read -r WF_ID; do
-              gh api repos/$REPO/actions/workflows/$WF_ID/runs \
-                -F branch="$BRANCH" \
-                -F status="in_progress,queued" \
-                --jq "[.workflow_runs[] | select(.run_number > ${{ github.run_number }}) | .run_number] | max? // empty" 2>/dev/null && break
-            done)
+          # Derive workflow id (works for .yml/.yaml)
+          WORKFLOW_FILE="${GITHUB_WORKFLOW_REF##*/}"
+          echo "Workflow file: $WORKFLOW_FILE"
 
-          if [ -n "$newer_run_id" ]; then
-            echo "Found newer run number $newer_run_id. Cancelling this run $RUN_ID."
-            gh run cancel "$RUN_ID"
-            # We exit successfully so this job is marked as completed,
-            # but the run will be cancelled shortly after.
+          # Get all queued/in_progress runs for this workflow on this branch
+          # If gh or jq fail, just treat as 'no newer runs' instead of erroring.
+          newer_run_number=$(
+            gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_FILE}/runs" \
+              -F branch="${GITHUB_REF_NAME}" \
+              -F status="queued,in_progress" \
+              --jq "[.workflow_runs[] | select(.run_number > ${GITHUB_RUN_NUMBER}) | .run_number] | max? // empty" \
+            2>/dev/null || echo ""
+          )
+
+          echo "newer_run_number='${newer_run_number}'"
+
+          if [ -n "$newer_run_number" ]; then
+            echo "Found newer run number ${newer_run_number}. Cancelling this run ${GITHUB_RUN_ID}."
+            gh run cancel "${GITHUB_RUN_ID}" || echo "Failed to cancel run, but continuing."
             exit 0
           fi
 
-          echo "No newer runs found. Proceeding with deployment."
+          echo "No newer run found. Proceeding with jobs."
   dummy_long_job:
     name: Dummy 5-minute job
     needs: guard
