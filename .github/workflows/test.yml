@@ -10,7 +10,7 @@ concurrency:
   group: root-deployment-${{ github.ref }}
   cancel-in-progress: false
 
-  # Needed so reusable workflow can call gh run cancel test
+  # Needed so reusable workflow can call gh run cancel
 permissions:
   actions: write
   contents: read
