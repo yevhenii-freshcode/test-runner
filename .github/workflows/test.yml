@@ -1,0 +1,69 @@
+name: Deployment
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  
+# Ensure only one run of this workflow executes at a time, but don't auto-cancel.
+concurrency:
+  group: root-deployment-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Cancel if this run is obsolete
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write # needed for gh run cancel via GITHUB_TOKEN
+      contents: read
+    steps:
+      - name: Install GitHub CLI
+        uses: cli/cli-action@v2
+        with:
+          version: latest
+
+      - name: Cancel this run if a newer one exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW_NAME: ${{ github.workflow }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          echo "Current run id: $RUN_ID"
+          echo "Checking for newer runs of workflow '${WORKFLOW_NAME}' on branch '${BRANCH}'"
+
+          # List runs of this workflow on this branch, newer first
+          newer_run_id=$(gh api \
+            repos/$REPO/actions/workflows \
+            --jq ".workflows[] | select(.name == \"${WORKFLOW_NAME}\") | .id" | while read -r WF_ID; do
+              gh api repos/$REPO/actions/workflows/$WF_ID/runs \
+                -F branch="$BRANCH" \
+                -F status="in_progress,queued" \
+                --jq "[.workflow_runs[] | select(.run_number > ${{ github.run_number }}) | .run_number] | max? // empty" 2>/dev/null && break
+            done)
+
+          if [ -n "$newer_run_id" ]; then
+            echo "Found newer run number $newer_run_id. Cancelling this run $RUN_ID."
+            gh run cancel "$RUN_ID"
+            # We exit successfully so this job is marked as completed,
+            # but the run will be cancelled shortly after.
+            exit 0
+          fi
+
+          echo "No newer runs found. Proceeding with deployment."
+  dummy_long_job:
+    name: Dummy 5-minute job
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print start time
+        run: echo "Dummy job started at $(date -u)"
+
+      - name: Sleep for 5 minutes
+        run: sleep 300
+
+      - name: Print end time
+        run: echo "Dummy job finished at $(date -u)"
+ 
