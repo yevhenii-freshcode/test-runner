@@ -46,8 +46,9 @@ jobs:
           # Basic sanity check: newer_run_number must be a number
           if [[ "$newer_run_number" =~ ^[0-9]+$ ]]; then
             echo "Found newer run number ${newer_run_number}. Cancelling this run ${GITHUB_RUN_ID}."
-            gh run cancel "${GITHUB_RUN_ID}" --repo "${REPO}" || echo "Failed to cancel run, but continuing."
-            exit 0
+            # Cancel and exit immediately to prevent any job progression
+            gh run cancel "${GITHUB_RUN_ID}" --repo "${REPO}"
+            exit 1
           fi
 
           echo "No valid newer run found. Proceeding with jobs."
